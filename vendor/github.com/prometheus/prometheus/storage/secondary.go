@@ -55,6 +55,11 @@ func (s *secondaryQuerier) LabelValues(name string, matchers ...*labels.Matcher)
 	return vals, w, nil
 }
 
+func (s *secondaryQuerier) LabelValuesSet(name string, matchers ...*labels.Matcher) (LabelValuesSet, error) {
+	vals, err := s.genericQuerier.LabelValuesStream(name, matchers...)
+	return vals, err
+}
+
 func (s *secondaryQuerier) LabelNames(matchers ...*labels.Matcher) ([]string, Warnings, error) {
 	names, w, err := s.genericQuerier.LabelNames(matchers...)
 	if err != nil {

@@ -32,6 +32,10 @@ func (noopQuerier) LabelValues(string, ...*labels.Matcher) ([]string, Warnings, 
 	return nil, nil, nil
 }
 
+func (noopQuerier) LabelValuesSet(string, ...*labels.Matcher) (LabelValuesSet, error) {
+	return nil, nil
+}
+
 func (noopQuerier) LabelNames(...*labels.Matcher) ([]string, Warnings, error) {
 	return nil, nil, nil
 }
@@ -51,6 +55,13 @@ func (noopChunkQuerier) Select(bool, *SelectHints, ...*labels.Matcher) ChunkSeri
 	return NoopChunkedSeriesSet()
 }
 
+func (noopChunkQuerier) LabelValues(string, ...*labels.Matcher) ([]string, Warnings, error) {
+	return nil, nil, nil
+}
+
+func (noopChunkQuerier) LabelValuesSet(string, ...*labels.Matcher) (LabelValuesSet, Warnings, error) {
+	return nil, nil
+}
 func (noopChunkQuerier) LabelValues(string, ...*labels.Matcher) ([]string, Warnings, error) {
 	return nil, nil, nil
 }
