@@ -14,7 +14,6 @@
     {
       target: 'ingester',
 
-      // Server config.
       'server.http-listen-port': $._config.server_http_port,
 
       // Ring config.
