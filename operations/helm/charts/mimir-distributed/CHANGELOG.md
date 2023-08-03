@@ -28,6 +28,7 @@ Entries should include a reference to the Pull Request that introduced the chang
 
 ## main / unreleased
 
+* [CHANGE] Reduce `-server.grpc-max-concurrent-streams` from 1000 to 100 (default). #5666
 * [ENHANCEMENT] Distributor: dynamically set `GOMAXPROCS` based on the CPU request. This should reduce distributor CPU utilization, assuming the CPU request is set to a value close to the actual utilization. #5588
 
 ## 5.0.0
