@@ -21,6 +21,7 @@ import (
 	httpgrpc_server "github.com/grafana/dskit/httpgrpc/server"
 	"github.com/grafana/dskit/middleware"
 	"github.com/grafana/dskit/services"
+	"github.com/grafana/dskit/tracing"
 	"github.com/grafana/dskit/user"
 	otgrpc "github.com/opentracing-contrib/go-grpc"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
@@ -30,7 +31,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
@@ -78,10 +78,7 @@ func TestFrontendPropagateTrace(t *testing.T) {
 	observedTraceID := make(chan string, 2)
 
 	handler := middleware.Tracer{}.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sp := opentracing.SpanFromContext(r.Context())
-		defer sp.Finish()
-
-		traceID := fmt.Sprintf("%v", sp.Context().(jaeger.SpanContext).TraceID())
+		traceID, _ := tracing.ExtractTraceID(r.Context())
 		observedTraceID <- traceID
 
 		_, err = w.Write([]byte(responseBody))
@@ -91,7 +88,7 @@ func TestFrontendPropagateTrace(t *testing.T) {
 	test := func(addr string, _ *Frontend) {
 		sp, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
 		defer sp.Finish()
-		traceID := fmt.Sprintf("%v", sp.Context().(jaeger.SpanContext).TraceID())
+		traceID, _ := tracing.ExtractTraceID(ctx)
 
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/%s", addr, query), nil)
 		require.NoError(t, err)
