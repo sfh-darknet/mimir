@@ -1448,6 +1448,9 @@ func TestLoadingSeriesChunkRefsSetIterator(t *testing.T) {
 			if hasher == nil {
 				hasher = cachedSeriesHasher{hashcache.NewSeriesHashCache(100).GetBlockCache("")}
 			}
+			if tc.strategy == 0 {
+				tc.strategy = defaultStrategy // the `0` strategy is not usable, so test cases probably meant to not set it
+			}
 			loadingIterator := newLoadingSeriesChunkRefsSetIterator(
 				context.Background(),
 				postingsIterator,
@@ -1730,9 +1733,9 @@ func TestOpenBlockSeriesChunkRefsSetsIterator(t *testing.T) {
 				maxT = testCase.maxT
 			}
 
-			var strategy seriesIteratorStrategy
+			strategy := defaultStrategy
 			if testCase.skipChunks {
-				strategy |= noChunkRefs
+				strategy = noChunkRefs
 			}
 			iterator, err := openBlockSeriesChunkRefsSetsIterator(
 				ctx,
