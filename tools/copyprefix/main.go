@@ -93,11 +93,11 @@ func runCopy(ctx context.Context, cfg config, logger log.Logger) error {
 
 	for _, name := range sourceNames {
 		if _, ok := exists[name]; ok {
-			logger.Log("Skipping copying {} since it exists in the destination bucket.", name)
+			logger.Log("msg", fmt.Sprintf("Skipping copying %s since it exists in the destination bucket.", name))
 			continue
 		}
 		if cfg.dryRun {
-			logger.Log("Would have copied {}, but skipping due to dry run.", name)
+			logger.Log("msg", fmt.Sprintf("Would have copied %s, but skipping due to dry run.", name))
 			continue
 		}
 		err := copyFunc(ctx, name)
