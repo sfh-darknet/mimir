@@ -128,9 +128,8 @@ func (c *CopyBucketConfig) toCopyFunc(source Bucket, destination Bucket) CopyFun
 		return func(ctx context.Context, objectName string) error {
 			return source.ClientSideCopy(ctx, objectName, destination)
 		}
-	} else {
-		return func(ctx context.Context, objectName string) error {
-			return source.ServerSideCopy(ctx, objectName, destination)
-		}
+	}
+	return func(ctx context.Context, objectName string) error {
+		return source.ServerSideCopy(ctx, objectName, destination)
 	}
 }

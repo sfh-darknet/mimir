@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/grafana/dskit/flagext"
+
 	"github.com/grafana/mimir/pkg/util/objtools"
 )
 

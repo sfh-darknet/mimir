@@ -52,8 +52,8 @@ func (c *AzureClientConfig) Validate(prefix string) error {
 	return nil
 }
 
-func (cfg *AzureClientConfig) ToBucket() (Bucket, error) {
-	urlParts, err := blob.ParseURL(cfg.ContainerURL)
+func (c *AzureClientConfig) ToBucket() (Bucket, error) {
+	urlParts, err := blob.ParseURL(c.ContainerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -61,11 +61,11 @@ func (cfg *AzureClientConfig) ToBucket() (Bucket, error) {
 	if containerName == "" {
 		return nil, errors.New("container name missing from Azure bucket URL")
 	}
-	serviceURL, found := strings.CutSuffix(cfg.ContainerURL, containerName)
+	serviceURL, found := strings.CutSuffix(c.ContainerURL, containerName)
 	if !found {
 		return nil, errors.New("malformed or unexpected Azure bucket URL")
 	}
-	keyCred, err := azblob.NewSharedKeyCredential(cfg.AccountName, cfg.AccountKey)
+	keyCred, err := azblob.NewSharedKeyCredential(c.AccountName, c.AccountKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get Azure shared key credential")
 	}
@@ -73,7 +73,7 @@ func (cfg *AzureClientConfig) ToBucket() (Bucket, error) {
 	if err != nil {
 		return nil, err
 	}
-	containerClient, err := container.NewClientWithSharedKeyCredential(cfg.ContainerURL, keyCred, nil)
+	containerClient, err := container.NewClientWithSharedKeyCredential(c.ContainerURL, keyCred, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (cfg *AzureClientConfig) ToBucket() (Bucket, error) {
 		Client:                  *client,
 		containerClient:         *containerClient,
 		containerName:           containerName,
-		copyStatusBackoffConfig: cfg.CopyStatusBackoff,
+		copyStatusBackoffConfig: c.CopyStatusBackoff,
 	}, nil
 }
 
