@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-package main
+package objtools
 
 import (
 	"context"
@@ -19,52 +19,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type azureConfig struct {
-	source            azureClientConfig
-	destination       azureClientConfig
-	copyStatusBackoff backoff.Config
-}
-
-func (c *azureConfig) RegisterFlags(f *flag.FlagSet) {
-	c.source.RegisterFlags("azure-source-", f)
-	c.destination.RegisterFlags("azure-destination-", f)
-	f.DurationVar(&c.copyStatusBackoff.MinBackoff, "azure-copy-status-backoff-min-duration", 15*time.Second, "The minimum amount of time to back off per copy operation.")
-	f.DurationVar(&c.copyStatusBackoff.MaxBackoff, "azure-copy-status-backoff-max-duration", 20*time.Second, "The maximum amount of time to back off per copy operation.")
-	f.IntVar(&c.copyStatusBackoff.MaxRetries, "azure-copy-status-backoff-max-retries", 40, "The maximum number of retries while checking the copy status.")
-}
-
-func (c *azureConfig) validate(source, destination string) error {
-	if source == serviceABS {
-		if err := c.source.validate("azure-source-"); err != nil {
-			return err
-		}
-	}
-	if destination == serviceABS {
-		return c.destination.validate("azure-destination-")
-	}
-	return nil
-}
-
-type azureClientConfig struct {
-	accountName string
-	accountKey  string
-}
-
-func (c *azureClientConfig) RegisterFlags(prefix string, f *flag.FlagSet) {
-	f.StringVar(&c.accountName, prefix+"account-name", "", "Account name for the Azure bucket.")
-	f.StringVar(&c.accountKey, prefix+"account-key", "", "Account key for the Azure bucket.")
-}
-
-func (c *azureClientConfig) validate(prefix string) error {
-	if c.accountName == "" {
-		return fmt.Errorf("the Azure bucket's account name (%s) is required", prefix+"account-name")
-	}
-	if c.accountKey == "" {
-		return fmt.Errorf("the Azure bucket's account key (%s) is required", prefix+"account-key")
-	}
-	return nil
-}
-
 type azureBucket struct {
 	azblob.Client
 	containerClient         container.Client
@@ -72,8 +26,34 @@ type azureBucket struct {
 	copyStatusBackoffConfig backoff.Config
 }
 
-func newAzureBucketClient(cfg azureClientConfig, containerURL string, backoffCfg backoff.Config) (bucket, error) {
-	urlParts, err := blob.ParseURL(containerURL)
+type AzureClientConfig struct {
+	ContainerURL      string
+	AccountName       string
+	AccountKey        string
+	CopyStatusBackoff backoff.Config
+}
+
+func (c *AzureClientConfig) RegisterFlags(prefix string, f *flag.FlagSet) {
+	f.StringVar(&c.ContainerURL, prefix+"container-url", "", "The container URL for Azure Blob Storage.")
+	f.StringVar(&c.AccountName, prefix+"account-name", "", "The storage account name for Azure Blob Storage.")
+	f.StringVar(&c.AccountKey, prefix+"account-key", "", "The storage account key for Azure Blob Storage.")
+	f.DurationVar(&c.CopyStatusBackoff.MinBackoff, prefix+"copy-status-backoff-min-duration", 15*time.Second, "The minimum amount of time to back off per copy operation sourced from this bucket.")
+	f.DurationVar(&c.CopyStatusBackoff.MaxBackoff, prefix+"copy-status-backoff-max-duration", 20*time.Second, "The maximum amount of time to back off per copy operation sourced from this bucket.")
+	f.IntVar(&c.CopyStatusBackoff.MaxRetries, prefix+"copy-status-backoff-max-retries", 40, "The maximum number of retries while checking the copy status of copies sourced from this bucket.")
+}
+
+func (c *AzureClientConfig) Validate(prefix string) error {
+	if c.AccountName == "" {
+		return fmt.Errorf("the Azure bucket's account name (%s) is required", prefix+"account-name")
+	}
+	if c.AccountKey == "" {
+		return fmt.Errorf("the Azure bucket's account key (%s) is required", prefix+"account-key")
+	}
+	return nil
+}
+
+func (cfg *AzureClientConfig) ToBucket() (Bucket, error) {
+	urlParts, err := blob.ParseURL(cfg.ContainerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +61,11 @@ func newAzureBucketClient(cfg azureClientConfig, containerURL string, backoffCfg
 	if containerName == "" {
 		return nil, errors.New("container name missing from Azure bucket URL")
 	}
-	serviceURL, found := strings.CutSuffix(containerURL, containerName)
+	serviceURL, found := strings.CutSuffix(cfg.ContainerURL, containerName)
 	if !found {
 		return nil, errors.New("malformed or unexpected Azure bucket URL")
 	}
-	keyCred, err := azblob.NewSharedKeyCredential(cfg.accountName, cfg.accountKey)
+	keyCred, err := azblob.NewSharedKeyCredential(cfg.AccountName, cfg.AccountKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get Azure shared key credential")
 	}
@@ -93,7 +73,7 @@ func newAzureBucketClient(cfg azureClientConfig, containerURL string, backoffCfg
 	if err != nil {
 		return nil, err
 	}
-	containerClient, err := container.NewClientWithSharedKeyCredential(containerURL, keyCred, nil)
+	containerClient, err := container.NewClientWithSharedKeyCredential(cfg.ContainerURL, keyCred, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +81,7 @@ func newAzureBucketClient(cfg azureClientConfig, containerURL string, backoffCfg
 		Client:                  *client,
 		containerClient:         *containerClient,
 		containerName:           containerName,
-		copyStatusBackoffConfig: backoffCfg,
+		copyStatusBackoffConfig: cfg.CopyStatusBackoff,
 	}, nil
 }
 
@@ -114,7 +94,7 @@ func (bkt *azureBucket) Get(ctx context.Context, objectName string) (io.ReadClos
 	return response.Body, nil
 }
 
-func (bkt *azureBucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *azureBucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	sourceClient := bkt.containerClient.NewBlobClient(objectName)
 	d, ok := dstBucket.(*azureBucket)
 	if !ok {
@@ -193,7 +173,7 @@ func checkCopyStatus(ctx context.Context, client *blob.Client) (*blob.CopyStatus
 	return response.CopyStatus, response.CopyStatusDescription, nil
 }
 
-func (bkt *azureBucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *azureBucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	sourceClient := bkt.containerClient.NewBlobClient(objectName)
 	response, err := sourceClient.DownloadStream(ctx, nil)
 	if err != nil {
@@ -211,8 +191,8 @@ func (bkt *azureBucket) ClientSideCopy(ctx context.Context, objectName string, d
 }
 
 func (bkt *azureBucket) ListPrefix(ctx context.Context, prefix string, recursive bool) ([]string, error) {
-	if prefix != "" && !strings.HasSuffix(prefix, delim) {
-		prefix = prefix + delim
+	if prefix != "" && !strings.HasSuffix(prefix, Delim) {
+		prefix = prefix + Delim
 	}
 
 	list := make([]string, 0, 10)
@@ -228,7 +208,7 @@ func (bkt *azureBucket) ListPrefix(ctx context.Context, prefix string, recursive
 			}
 		}
 	} else {
-		pager := bkt.containerClient.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &prefix})
+		pager := bkt.containerClient.NewListBlobsHierarchyPager(Delim, &container.ListBlobsHierarchyOptions{Prefix: &prefix})
 		for pager.More() {
 			page, err := pager.NextPage(ctx)
 			if err != nil {

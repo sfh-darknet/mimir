@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-package main
+package objtools
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"io"
 	"strings"
 
@@ -12,16 +14,35 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+type GCSClientConfig struct {
+	BucketName string
+}
+
+func (c *GCSClientConfig) RegisterFlags(prefix string, f *flag.FlagSet) {
+	f.StringVar(&c.BucketName, prefix+"bucket-name", "", "The name of the GCS bucket (not prefixed by a scheme).")
+}
+
+func (c *GCSClientConfig) Validate(prefix string) error {
+	if c.BucketName == "" {
+		return fmt.Errorf("the GCS bucket name provided in (%s) is required", prefix+"bucket-name")
+	}
+	return nil
+}
+
+func (c *GCSClientConfig) ToBucket(ctx context.Context) (Bucket, error) {
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create GCS storage client")
+	}
+	return &gcsBucket{
+		BucketHandle: *client.Bucket(c.BucketName),
+		name:         c.BucketName,
+	}, nil
+}
+
 type gcsBucket struct {
 	storage.BucketHandle
 	name string
-}
-
-func newGCSBucket(client *storage.Client, name string) bucket {
-	return &gcsBucket{
-		BucketHandle: *client.Bucket(name),
-		name:         name,
-	}
 }
 
 func (bkt *gcsBucket) Get(ctx context.Context, objectName string) (io.ReadCloser, error) {
@@ -33,10 +54,10 @@ func (bkt *gcsBucket) Get(ctx context.Context, objectName string) (io.ReadCloser
 	return r, nil
 }
 
-func (bkt *gcsBucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *gcsBucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	d, ok := dstBucket.(*gcsBucket)
 	if !ok {
-		return errors.New("destination bucket wasn't a GCS bucket")
+		return errors.New("destination Bucket wasn't a GCS Bucket")
 	}
 	srcObj := bkt.Object(objectName)
 	dstObject := d.BucketHandle.Object(objectName)
@@ -45,7 +66,7 @@ func (bkt *gcsBucket) ServerSideCopy(ctx context.Context, objectName string, dst
 	return err
 }
 
-func (bkt *gcsBucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *gcsBucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	srcObj := bkt.Object(objectName)
 	reader, err := srcObj.NewReader(ctx)
 	if err != nil {
@@ -59,15 +80,15 @@ func (bkt *gcsBucket) ClientSideCopy(ctx context.Context, objectName string, dst
 }
 
 func (bkt *gcsBucket) ListPrefix(ctx context.Context, prefix string, recursive bool) ([]string, error) {
-	if len(prefix) > 0 && prefix[len(prefix)-1:] != delim {
-		prefix = prefix + delim
+	if len(prefix) > 0 && prefix[len(prefix)-1:] != Delim {
+		prefix = prefix + Delim
 	}
 
 	q := &storage.Query{
 		Prefix: prefix,
 	}
 	if !recursive {
-		q.Delimiter = delim
+		q.Delimiter = Delim
 	}
 
 	var result []string

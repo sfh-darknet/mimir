@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-package main
+package objtools
 
 import (
 	"context"
@@ -13,72 +13,55 @@ import (
 	"github.com/pkg/errors"
 )
 
-type s3Config struct {
-	source      s3ClientConfig
-	destination s3ClientConfig
+type S3ClientConfig struct {
+	BucketName string
+	Endpoint   string
+	AccessKey  string
+	SecretKey  string
+	Secure     bool
 }
 
-func (c *s3Config) RegisterFlags(f *flag.FlagSet) {
-	c.source.RegisterFlags("s3-source-", f)
-	c.destination.RegisterFlags("s3-destination-", f)
+func (c *S3ClientConfig) RegisterFlags(prefix string, f *flag.FlagSet) {
+	f.StringVar(&c.BucketName, prefix+"bucket-name", "", "The name of the bucket (not prefixed by a scheme).")
+	f.StringVar(&c.Endpoint, prefix+"endpoint", "", "The endpoint to contact when accessing the bucket.")
+	f.StringVar(&c.AccessKey, prefix+"access-key", "", "The access key used in AWS Signature Version 4 authentication.")
+	f.StringVar(&c.SecretKey, prefix+"secret-key", "", "The secret key used in AWS Signature Version 4 authentication.")
+	f.BoolVar(&c.Secure, prefix+"secure", true, "If true (default), use HTTPS when connecting to the Bucket. If false, insecure HTTP is used.")
 }
 
-func (c *s3Config) validate(source, destination string) error {
-	if source == serviceS3 {
-		if err := c.source.validate("s3-source-"); err != nil {
-			return err
-		}
+func (c *S3ClientConfig) Validate(prefix string) error {
+	if c.BucketName == "" {
+		return errors.New(prefix + "bucket name is missing")
 	}
-	if destination == serviceS3 {
-		return c.destination.validate("s3-destination-")
-	}
-	return nil
-}
-
-type s3ClientConfig struct {
-	endpoint  string
-	accessKey string
-	secretKey string
-	secure    bool
-}
-
-func (c *s3ClientConfig) RegisterFlags(prefix string, f *flag.FlagSet) {
-	f.StringVar(&c.endpoint, prefix+"endpoint", "", "The endpoint to contact when accessing the bucket.")
-	f.StringVar(&c.accessKey, prefix+"access-key", "", "The access key used in AWS Signature Version 4 authentication.")
-	f.StringVar(&c.secretKey, prefix+"secret-key", "", "The secret key used in AWS Signature Version 4 authentication.")
-	f.BoolVar(&c.secure, prefix+"secure", true, "If true (default), use HTTPS when connecting to the bucket. If false, insecure HTTP is used.")
-}
-
-func (c *s3ClientConfig) validate(prefix string) error {
-	if c.endpoint == "" {
+	if c.Endpoint == "" {
 		return errors.New(prefix + "endpoint is missing")
 	}
-	if c.accessKey == "" {
+	if c.AccessKey == "" {
 		return errors.New(prefix + "access-key is missing")
 	}
-	if c.secretKey == "" {
+	if c.SecretKey == "" {
 		return errors.New(prefix + "secret-key is missing")
 	}
 	return nil
 }
 
-type s3Bucket struct {
-	*minio.Client
-	bucketName string
-}
-
-func newS3Client(cfg s3ClientConfig, bucketName string) (bucket, error) {
-	client, err := minio.New(cfg.endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.accessKey, cfg.secretKey, ""),
-		Secure: cfg.secure,
+func (c *S3ClientConfig) ToBucket() (Bucket, error) {
+	client, err := minio.New(c.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(c.AccessKey, c.SecretKey, ""),
+		Secure: c.Secure,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &s3Bucket{
 		Client:     client,
-		bucketName: bucketName,
+		bucketName: c.BucketName,
 	}, nil
+}
+
+type s3Bucket struct {
+	*minio.Client
+	bucketName string
 }
 
 func (bkt *s3Bucket) Get(ctx context.Context, objectName string) (io.ReadCloser, error) {
@@ -89,10 +72,10 @@ func (bkt *s3Bucket) Get(ctx context.Context, objectName string) (io.ReadCloser,
 	return obj, nil
 }
 
-func (bkt *s3Bucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *s3Bucket) ServerSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	d, ok := dstBucket.(*s3Bucket)
 	if !ok {
-		return errors.New("destination bucket wasn't an S3 bucket")
+		return errors.New("destination Bucket wasn't an S3 Bucket")
 	}
 	_, err := d.CopyObject(ctx,
 		minio.CopyDestOptions{
@@ -107,7 +90,7 @@ func (bkt *s3Bucket) ServerSideCopy(ctx context.Context, objectName string, dstB
 	return err
 }
 
-func (bkt *s3Bucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket bucket) error {
+func (bkt *s3Bucket) ClientSideCopy(ctx context.Context, objectName string, dstBucket Bucket) error {
 	obj, err := bkt.GetObject(ctx, bkt.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		return errors.Wrap(err, "failed to get source object from S3")
@@ -124,8 +107,8 @@ func (bkt *s3Bucket) ClientSideCopy(ctx context.Context, objectName string, dstB
 }
 
 func (bkt *s3Bucket) ListPrefix(ctx context.Context, prefix string, recursive bool) ([]string, error) {
-	if prefix != "" && !strings.HasSuffix(prefix, delim) {
-		prefix = prefix + delim
+	if prefix != "" && !strings.HasSuffix(prefix, Delim) {
+		prefix = prefix + Delim
 	}
 	options := minio.ListObjectsOptions{
 		Prefix:    prefix,
