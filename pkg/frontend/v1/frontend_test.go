@@ -80,7 +80,7 @@ func TestFrontendPropagateTrace(t *testing.T) {
 	observedTraceID := make(chan string, 2)
 
 	handler := middleware.Tracer{}.Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		traceID, _ := tracing.ExtractTraceID(r.Context())
+		traceID, _ := tracing.ExtractOtelTraceID(r.Context())
 		observedTraceID <- traceID
 
 		_, err = w.Write([]byte(responseBody))
@@ -91,7 +91,7 @@ func TestFrontendPropagateTrace(t *testing.T) {
 		ctx, sp := otel.Tracer("github.com/grafana/mimir").Start(context.Background(), "client")
 		defer sp.End()
 
-		traceID, _ := tracing.ExtractTraceID(ctx)
+		traceID, _ := tracing.ExtractOtelTraceID(ctx)
 
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/%s", addr, query), nil)
 		require.NoError(t, err)
