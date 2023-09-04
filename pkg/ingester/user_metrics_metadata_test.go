@@ -89,6 +89,7 @@ func TestUserMetricsMetadata(t *testing.T) {
 				true,
 				func() *InstanceLimits { return nil },
 				nil,
+				nil,
 			)
 
 			mm := newMetadataMap(limiter, metrics, "test")
