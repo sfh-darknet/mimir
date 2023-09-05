@@ -29,10 +29,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/uber/jaeger-client-go/config"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 
@@ -41,6 +41,7 @@ import (
 	querier_worker "github.com/grafana/mimir/pkg/querier/worker"
 	"github.com/grafana/mimir/pkg/scheduler/queue"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 const (
@@ -73,9 +74,14 @@ func TestFrontend(t *testing.T) {
 }
 
 func TestFrontendPropagateTrace(t *testing.T) {
-	closer, err := config.Configuration{}.InitGlobalTracer("test")
-	require.NoError(t, err)
-	defer closer.Close()
+	exp := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(tp)
+	// closer, err := config.Configuration{}.InitGlobalTracer("test")
+	defer tp.Shutdown(context.Background())
 
 	observedTraceID := make(chan string, 2)
 
@@ -83,12 +89,12 @@ func TestFrontendPropagateTrace(t *testing.T) {
 		traceID, _ := tracing.ExtractOtelTraceID(r.Context())
 		observedTraceID <- traceID
 
-		_, err = w.Write([]byte(responseBody))
+		_, err := w.Write([]byte(responseBody))
 		require.NoError(t, err)
 	}))
 
 	test := func(addr string, _ *Frontend) {
-		ctx, sp := otel.Tracer("github.com/grafana/mimir").Start(context.Background(), "client")
+		ctx, sp := otel.Tracer("").Start(context.Background(), "client")
 		defer sp.End()
 
 		traceID, _ := tracing.ExtractOtelTraceID(ctx)
