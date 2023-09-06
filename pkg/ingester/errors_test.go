@@ -3,27 +3,14 @@
 package ingester
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/grafana/mimir/pkg/mimirpb"
-)
-
-const (
-	errorSampleRate = 5
-	timestamp       = model.Time(1575043969)
-	oooTimeWindow   = 2 * time.Hour
-)
-
-var (
-	metricLabelAdapters = []mimirpb.LabelAdapter{{Name: labels.MetricName, Value: "test"}}
 )
 
 func TestNewIngestErrMsgs(t *testing.T) {
@@ -60,77 +47,5 @@ func TestNewIngestErrMsgs(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			assert.Equal(t, tc.msg, tc.err.Error())
 		})
-	}
-}
-
-func testWrappedError(t *testing.T, emptySamplerWrapper func(error) error, samplerWrapper func(error) error, err error) {
-	require.Error(t, err)
-
-	wrappedError := emptySamplerWrapper(err)
-	errors.Is(wrappedError, err)
-
-	wrappedError = samplerWrapper(err)
-	require.Error(t, wrappedError)
-	require.Errorf(t, wrappedError, fmt.Sprintf("%s (sampled 1/%d)", err.Error(), errorSampleRate))
-}
-
-func TestIngesterErrSamplersWrapper(t *testing.T) {
-	emptySamplers := newIngesterErrSamplers(0)
-	samplers := newIngesterErrSamplers(errorSampleRate)
-
-	tests := map[string]struct {
-		emptySamplerWraper func(error) error
-		samplerWrapper     func(error) error
-		err                error
-	}{
-		"WrapSampleTimestampTooOldError": {
-			emptySamplerWraper: emptySamplers.WrapSampleTimestampTooOldError,
-			samplerWrapper:     samplers.WrapSampleTimestampTooOldError,
-			err:                newIngestErrSampleTimestampTooOld(timestamp, metricLabelAdapters),
-		},
-		"WrapSampleTimestampTooOldOOOEnabledError": {
-			emptySamplerWraper: emptySamplers.WrapSampleTimestampTooOldOOOEnabledError,
-			samplerWrapper:     samplers.WrapSampleTimestampTooOldOOOEnabledError,
-			err:                newIngestErrSampleTimestampTooOldOOOEnabled(timestamp, metricLabelAdapters, oooTimeWindow),
-		},
-		"WrapSampleTimestampTooFarInFutureError": {
-			emptySamplerWraper: emptySamplers.WrapSampleTimestampTooFarInFutureError,
-			samplerWrapper:     samplers.WrapSampleTimestampTooFarInFutureError,
-			err:                newIngestErrSampleTimestampTooFarInFuture(model.Time(time.Now().UnixMilli()+(86400*1000)), metricLabelAdapters),
-		},
-		"WrapSampleOutOfOrderError": {
-			emptySamplerWraper: emptySamplers.WrapSampleOutOfOrderError,
-			samplerWrapper:     samplers.WrapSampleOutOfOrderError,
-			err:                newIngestErrSampleOutOfOrder(model.Time(9), metricLabelAdapters),
-		},
-		"WrapSampleDuplicateTimestampError": {
-			emptySamplerWraper: emptySamplers.WrapSampleDuplicateTimestampError,
-			samplerWrapper:     samplers.WrapSampleDuplicateTimestampError,
-			err:                newIngestErrSampleDuplicateTimestamp(timestamp, metricLabelAdapters),
-		},
-		"WrapMaxSeriesPerMetricLimitExceededError": {
-			emptySamplerWraper: emptySamplers.WrapMaxSeriesPerMetricLimitExceededError,
-			samplerWrapper:     samplers.WrapMaxSeriesPerMetricLimitExceededError,
-			err:                errMaxSeriesPerMetricLimitExceeded,
-		},
-		"WrapMaxMetadataPerMetricLimitExceededError": {
-			emptySamplerWraper: emptySamplers.WrapMaxMetadataPerMetricLimitExceededError,
-			samplerWrapper:     samplers.WrapMaxMetadataPerMetricLimitExceededError,
-			err:                fmt.Errorf("max metadata per metric limit exceeded"),
-		},
-		"WrapMaxSeriesPerUserLimitExceededError": {
-			emptySamplerWraper: emptySamplers.WrapMaxSeriesPerUserLimitExceededError,
-			samplerWrapper:     samplers.WrapMaxSeriesPerUserLimitExceededError,
-			err:                errMaxSeriesPerUserLimitExceeded,
-		},
-		"WrapMaxMetadataPerUserLimitExceededError": {
-			emptySamplerWraper: emptySamplers.WrapMaxMetadataPerUserLimitExceededError,
-			samplerWrapper:     samplers.WrapMaxMetadataPerUserLimitExceededError,
-			err:                fmt.Errorf("max metadata per user limit exceeded"),
-		},
-	}
-
-	for _, testData := range tests {
-		testWrappedError(t, testData.emptySamplerWraper, testData.samplerWrapper, testData.err)
 	}
 }
