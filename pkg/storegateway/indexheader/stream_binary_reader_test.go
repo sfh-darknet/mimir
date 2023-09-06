@@ -98,7 +98,7 @@ func TestStreamBinaryReader_CheckSparseHeadersCorrectnessExtensive(t *testing.T)
 			valueSymbols := generateSymbols("value", valueCount)
 
 			t.Run(fmt.Sprintf("%vNames%vValues", nameCount, valueCount), func(t *testing.T) {
-				t.Parallel()
+				// t.Parallel()  TODO: https://github.com/grafana/mimir/issues/5943
 
 				blockID, err := block.CreateBlock(ctx, tmpDir, generateLabels(nameSymbols, valueSymbols), 100, 0, 1000, labels.FromStrings("ext1", "1"))
 				require.NoError(t, err)
