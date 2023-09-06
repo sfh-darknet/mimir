@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -139,6 +140,12 @@ func TestUpload(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String()), os.ModePerm))
 
+	// Verify series and chunks count to catch if index size is supposed to change.
+	hs, err := GatherBlockHealthStats(log.NewNopLogger(), path.Join(tmpDir, b1.String()), 0, math.MaxInt64, true)
+	require.NoError(t, err)
+	require.Equal(t, int64(5), hs.TotalSeries)
+	require.Equal(t, int64(8), hs.TotalChunks)
+
 	t.Run("wrong dir", func(t *testing.T) {
 		// Wrong dir.
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "not-existing"), nil)
@@ -206,7 +213,7 @@ func TestUpload(t *testing.T) {
 		require.Equal(t, 3, len(bkt.Objects()))
 		chunkFileSize := getFileSize(t, filepath.Join(tmpDir, b1.String(), ChunksDirname, "000001"))
 		require.Equal(t, chunkFileSize, int64(len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")])))
-		require.Equal(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		require.Equal(t, 418, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		require.Equal(t, 568, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
 		origMeta, err := ReadMetaFromDir(path.Join(tmpDir, "test", b1.String()))
@@ -218,7 +225,7 @@ func TestUpload(t *testing.T) {
 		files := uploadedMeta.Thanos.Files
 		require.Len(t, files, 3)
 		require.Equal(t, File{RelPath: "chunks/000001", SizeBytes: chunkFileSize}, files[0])
-		require.Equal(t, File{RelPath: "index", SizeBytes: 401}, files[1])
+		require.Equal(t, File{RelPath: "index", SizeBytes: 418}, files[1])
 		require.Equal(t, File{RelPath: "meta.json", SizeBytes: 0}, files[2]) // meta.json is added to the files without its size.
 
 		// clear files before comparing against original meta.json
@@ -233,7 +240,7 @@ func TestUpload(t *testing.T) {
 		require.Equal(t, 3, len(bkt.Objects()))
 		chunkFileSize := getFileSize(t, filepath.Join(tmpDir, b1.String(), ChunksDirname, "000001"))
 		require.Equal(t, chunkFileSize, int64(len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")])))
-		require.Equal(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		require.Equal(t, 418, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		require.Equal(t, 568, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	})
 
@@ -254,7 +261,7 @@ func TestUpload(t *testing.T) {
 		chunkFileSize := getFileSize(t, filepath.Join(tmpDir, b2.String(), ChunksDirname, "000001"))
 		require.Equal(t, 6, len(bkt.Objects())) // 3 from b1, 3 from b2
 		require.Equal(t, chunkFileSize, int64(len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")])))
-		require.Equal(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
+		require.Equal(t, 418, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
 		require.Equal(t, 547, len(bkt.Objects()[path.Join(b2.String(), MetaFilename)]))
 
 		origMeta, err := ReadMetaFromDir(path.Join(tmpDir, b2.String()))
