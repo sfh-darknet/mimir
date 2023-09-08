@@ -3180,7 +3180,7 @@ func (i *Ingester) purgeUserMetricsMetadata() {
 }
 
 // MetricsMetadata returns all the metrics metadata of a user.
-func (i *Ingester) MetricsMetadata(ctx context.Context, _ *client.MetricsMetadataRequest) (*client.MetricsMetadataResponse, error) {
+func (i *Ingester) MetricsMetadata(ctx context.Context, req *client.MetricsMetadataRequest) (*client.MetricsMetadataResponse, error) {
 	if err := i.checkRunning(); err != nil {
 		return nil, err
 	}
@@ -3196,7 +3196,7 @@ func (i *Ingester) MetricsMetadata(ctx context.Context, _ *client.MetricsMetadat
 		return &client.MetricsMetadataResponse{}, nil
 	}
 
-	return &client.MetricsMetadataResponse{Metadata: userMetadata.toClientMetadata()}, nil
+	return &client.MetricsMetadataResponse{Metadata: userMetadata.toClientMetadata(req)}, nil
 }
 
 // CheckReady is the readiness handler used to indicate to k8s when the ingesters
